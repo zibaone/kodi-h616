@@ -35,6 +35,12 @@
             withAom = false;
             withSvtav1 = false;
             withRav1e = false;
+            # ffplay et la sortie SDL n'ont aucun usage dans une image kiosque.
+            # Les laisser tire sdl2-compat → sdl3 → zenity → libadwaita → GTK4 :
+            # c'est l'essentiel des 1,1 Gio de fermeture mesurés en CI pour un
+            # lecteur qui n'existe pas.
+            withSdl2 = false;
+            buildFfplay = false;
           };
         };
     in
