@@ -1,0 +1,80 @@
+name: build-aarch64
+
+# Vérifie trois choses sur un runner ARM natif, sans nixbian ni noyau :
+#   1. le disque : la fermeture tient-elle sur le runner (/mnt monté sur /nix) ?
+#   2. la durée réelle de ffmpeg + kodi, comparée aux 12 h+ en émulation ;
+#   3. que le gate hwconfig passe sur aarch64 (il n'avait été validé qu'en x86).
+on:
+  push:
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-24.04-arm
+    timeout-minutes: 150
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Disque — monter /mnt (74 Go) sur /nix AVANT d'installer Nix
+        run: |
+          echo "=== avant ==="
+          df -h / /mnt || true
+          sudo mkdir -p /mnt/nix /nix
+          sudo mount --bind /mnt/nix /nix
+          echo "=== après ==="
+          df -h /nix
+          echo "cpu: $(nproc) | ram: $(free -g | awk '/^Mem:/{print $2}') Go"
+
+      - uses: cachix/install-nix-action@v31
+        with:
+          extra_nix_config: |
+            experimental-features = nix-command flakes
+            max-jobs = 4
+            cores = 0
+
+      - name: Environnement
+        run: |
+          nix --version
+          uname -m
+          df -h /nix
+
+      - name: Build ffmpeg v4l2-request (chronométré)
+        run: |
+          s=$(date +%s)
+          nix build -L .#packages.aarch64-linux.ffmpeg-v4l2request
+          d=$(( $(date +%s) - s ))
+          echo "| ffmpeg | ${d}s |" | tee -a "$GITHUB_STEP_SUMMARY"
+
+      - name: Build kodi 21.3 + backport (chronométré)
+        run: |
+          s=$(date +%s)
+          nix build -L .#packages.aarch64-linux.kodi
+          d=$(( $(date +%s) - s ))
+          echo "| kodi | ${d}s |" | tee -a "$GITHUB_STEP_SUMMARY"
+
+      - name: Gate hwconfig (h264 + hevc → DRM_PRIME / HW_DEVICE_CTX / DRM)
+        run: |
+          s=$(date +%s)
+          nix build -L .#checks.aarch64-linux.hwconfig
+          cat result | tee -a "$GITHUB_STEP_SUMMARY"
+          d=$(( $(date +%s) - s ))
+          echo "| gate | ${d}s |" | tee -a "$GITHUB_STEP_SUMMARY"
+
+      - name: Mesures (tailles réelles)
+        run: |
+          {
+            echo "| paquet | taille |"
+            echo "|---|---|"
+            nix path-info -S .#packages.aarch64-linux.ffmpeg-v4l2request .#packages.aarch64-linux.kodi |
+              awk '{printf "| %s | %.1f Mio |\n", $1, $2/1048576}'
+            echo
+            echo "fermeture kodi : $(nix path-info -rS .#packages.aarch64-linux.kodi | awk '{s+=$2} END {printf "%.2f Gio", s/1073741824}')"
+            echo
+            df -h /nix
+          } | tee rapport.txt | tee -a "$GITHUB_STEP_SUMMARY"
+
+      - uses: actions/upload-artifact@v7
+        if: always()
+        with:
+          name: rapport
+          path: rapport.txt
