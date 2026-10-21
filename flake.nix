@@ -10,7 +10,17 @@
         "aarch64-linux"
         "x86_64-linux"
       ];
-      forAll = f: nixpkgs.lib.genAttrs systems (system: f nixpkgs.legacyPackages.${system});
+      forAll = f: nixpkgs.lib.genAttrs systems (system: f (pkgsFor system));
+
+      # Les optimisations de l'arbre kodi (overlays/kodi-h616.nix) sont
+      # appliquées à la source : toutes les dépendances en bénéficient
+      # (libdecor, libavif, Pillow…), pas seulement le paquet kodi.
+      pkgsFor =
+        system:
+        import nixpkgs {
+          inherit system;
+          overlays = [ self.overlays.default ];
+        };
 
       # Élagage des encodeurs : jamais utilisés en lecture (x265 ~24 Mo, x264,
       # libvpx, libaom, svt-av1 ~45 Mo au total). Le décodage reste intact,
@@ -42,6 +52,10 @@
       checks = forAll (pkgs: {
         hwconfig = self.packages.${pkgs.system}.ffmpeg-v4l2request.passthru.tests.hwconfigTest;
       });
+
+      # Réutilisable par un flake NixOS : mêmes paquets, mêmes optimisations,
+      # sans dupliquer les définitions.
+      overlays.default = import ./overlays/kodi-h616.nix;
 
       formatter = forAll (pkgs: pkgs.nixfmt-rfc-style);
     };

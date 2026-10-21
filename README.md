@@ -33,10 +33,21 @@ exige, pour h264 **et** hevc : `pix_fmt = DRM_PRIME`, méthode `HW_DEVICE_CTX`,
 
 ## Élagage
 
-Les encodeurs sont désactivés (`x264`, `x265`, `libvpx`, `libaom`, `svt-av1`,
-`rav1e`) : jamais utilisés en lecture, ~70 Mo gagnés. Le décodage reste complet,
-AV1 compris (`dav1d`). Kodi perd en plus `bluez`, `libplist` et `lirc` — les
-télécommandes passent par `rc-core`/input, pas par le daemon lirc.
+Deux niveaux, séparés volontairement.
+
+**Niveau 1 — appliqué par défaut** (`overlays/kodi-h616.nix`), ne touche que
+l'arbre de kodi : `mesa-demos` remplacé par un stub, `libdecor` sans le plugin
+GTK (→ pas de `gtk+3`), `cwiid` sans `wmgui` (GTK2), `libavif` sans l'encodeur
+aom, Pillow sans son test AVIF. Les encodeurs ffmpeg sont désactivés (`x264`,
+`x265`, `libvpx`, `libaom`, `svt-av1`, `rav1e`) : jamais utilisés en lecture,
+~70 Mo gagnés, décodage complet (AV1 via `dav1d`). Kodi perd en plus `bluez`,
+`libplist` et `lirc`.
+
+**Niveau 2 — non inclus**, car ce sont des services système et non des paquets
+de kodi : `pipewire` élagué (gstreamer, bluez5, libcamera), `wlroots` sans
+XWayland, `ffmpeg-headless`. Les couper ici retirerait l'audio Bluetooth et le
+support des webcams à quiconque consomme l'overlay. Le profil kiosque (cage +
+pipewire) les active chez lui.
 
 ## État
 
