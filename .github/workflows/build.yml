@@ -36,13 +36,18 @@ jobs:
             max-jobs = 4
             cores = 0
 
-      # Pousse chaque dérivation construite vers havenos.cachix.org via le
-      # post-build-hook : c'est ce qui rend l'image assemblable en local sans
-      # recompiler kodi ni ffmpeg sous émulation.
+      # Lecture du cache havenos. La *publication* exige une signature côté
+      # client que ce dépôt n'a pas : sans clé, cachix.org répond 400
+      # « This cache requires client-side signing, but the narinfo has no
+      # signature ». Deux déblocages possibles, hors dépôt :
+      #   - activer la signature déléguée dans les réglages du cache, ou
+      #   - fournir CACHIX_SIGNING_KEY (secret GitHub).
+      # Le jour où l'un des deux est fait : passer skipPush à false.
       - uses: cachix/cachix-action@v17
         with:
           name: havenos
           authToken: '${{ secrets.CACHIX_AUTH_TOKEN }}'
+          skipPush: true
 
       - name: Environnement
         run: |
