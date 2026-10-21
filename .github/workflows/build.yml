@@ -36,18 +36,19 @@ jobs:
             max-jobs = 4
             cores = 0
 
-      # Lecture du cache havenos. La *publication* exige une signature côté
-      # client que ce dépôt n'a pas : sans clé, cachix.org répond 400
-      # « This cache requires client-side signing, but the narinfo has no
-      # signature ». Deux déblocages possibles, hors dépôt :
-      #   - activer la signature déléguée dans les réglages du cache, ou
-      #   - fournir CACHIX_SIGNING_KEY (secret GitHub).
-      # Le jour où l'un des deux est fait : passer skipPush à false.
+      # Publication vers havenos.cachix.org. Deux secrets sont nécessaires :
+      #   CACHIX_AUTH_TOKEN   — token « read and write » du cache ;
+      #   CACHIX_SIGNING_KEY  — clé de signature côté client (le cache refuse
+      #                         un narinfo non signé : 400 « This cache
+      #                         requires client-side signing »).
+      # Sans le second, cachix-action échoue en post-traitement : c'est
+      # pourquoi `skipPush` avait été posé, puis retiré une fois la clé en
+      # place. Ne pas remettre l'un sans l'autre.
       - uses: cachix/cachix-action@v17
         with:
           name: havenos
           authToken: '${{ secrets.CACHIX_AUTH_TOKEN }}'
-          skipPush: true
+          signingKey: '${{ secrets.CACHIX_SIGNING_KEY }}'
 
       - name: Environnement
         run: |
