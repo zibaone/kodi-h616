@@ -36,6 +36,14 @@ jobs:
             max-jobs = 4
             cores = 0
 
+      # Pousse chaque dérivation construite vers havenos.cachix.org via le
+      # post-build-hook : c'est ce qui rend l'image assemblable en local sans
+      # recompiler kodi ni ffmpeg sous émulation.
+      - uses: cachix/cachix-action@v17
+        with:
+          name: havenos
+          authToken: '${{ secrets.CACHIX_AUTH_TOKEN }}'
+
       - name: Environnement
         run: |
           nix --version
