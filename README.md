@@ -1,12 +1,16 @@
-# kodi-h616
+# nix-v4l2-request
 
-Kodi 21.3 avec décodage matériel **stateless V4L2 Request** sur les SoC Allwinner
-H616/H618 (Orange Pi Zero 3, Zero 2W, T507…).
+Paquets Nix pour le décodage matériel **stateless V4L2 Request** : FFmpeg 6.1
+patché, et Kodi 21.3 qui l'utilise.
 
-Nixpkgs ne fournit que `withV4l2` (libv4l2) et `withV4l2M2m` (API *stateful*). Le
-décodeur du H616/H618 — driver `cedrus` — passe par la **Request API**, dont le
-support n'existe qu'en aval de FFmpeg. Ce dépôt vendorise les deux pièces
-nécessaires :
+Écrit et validé sur Allwinner H616/H618 (Orange Pi Zero 3, driver `cedrus`),
+mais rien ici n'est propre à ce SoC : la même série de patches couvre `rkvdec`
+(Rockchip), `hantro` (i.MX8M) et `meson-vdec`. Le nom suit l'API et la série
+amont, pas la carte.
+
+Nixpkgs ne fournit que `withV4l2` (libv4l2) et `withV4l2M2m` (API *stateful*).
+Les décodeurs stateless passent par la **Request API**, dont le support n'existe
+qu'en aval de FFmpeg. Ce dépôt vendorise les deux pièces nécessaires :
 
 | pièce | origine | ce qu'elle fait |
 |---|---|---|
@@ -35,7 +39,7 @@ exige, pour h264 **et** hevc : `pix_fmt = DRM_PRIME`, méthode `HW_DEVICE_CTX`,
 
 Deux niveaux, séparés volontairement.
 
-**Niveau 1 — appliqué par défaut** (`overlays/kodi-h616.nix`), ne touche que
+**Niveau 1 — appliqué par défaut** (`overlays/v4l2-request.nix`), ne touche que
 l'arbre de kodi : `mesa-demos` remplacé par un stub, `libdecor` sans le plugin
 GTK (→ pas de `gtk+3`), `cwiid` sans `wmgui` (GTK2), `libavif` sans l'encodeur
 aom, Pillow sans son test AVIF. Les encodeurs ffmpeg sont désactivés (`x264`,

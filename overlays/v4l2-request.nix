@@ -15,7 +15,7 @@ final: prev: {
   # outil de test OpenGL, tiré par kodi sans être utilisé à l'exécution.
   mesa-demos = prev.runCommand "mesa-demos-stub" { } ''
     mkdir -p $out/bin
-    echo "mesa-demos retiré (kodi-h616) — retirer l'overlay pour l'avoir" > $out/README
+    echo "mesa-demos retiré (nix-v4l2-request) — retirer l'overlay pour l'avoir" > $out/README
   '';
 
   # libdecor : décorations Wayland côté client. Le backend cairo suffit en

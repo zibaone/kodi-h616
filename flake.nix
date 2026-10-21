@@ -12,7 +12,7 @@
       ];
       forAll = f: nixpkgs.lib.genAttrs systems (system: f (pkgsFor system));
 
-      # Les optimisations de l'arbre kodi (overlays/kodi-h616.nix) sont
+      # Les optimisations de l'arbre kodi (overlays/v4l2-request.nix) sont
       # appliquées à la source : toutes les dépendances en bénéficient
       # (libdecor, libavif, Pillow…), pas seulement le paquet kodi.
       pkgsFor =
@@ -55,7 +55,7 @@
 
       # Réutilisable par un flake NixOS : mêmes paquets, mêmes optimisations,
       # sans dupliquer les définitions.
-      overlays.default = import ./overlays/kodi-h616.nix;
+      overlays.default = import ./overlays/v4l2-request.nix;
 
       formatter = forAll (pkgs: pkgs.nixfmt-rfc-style);
     };

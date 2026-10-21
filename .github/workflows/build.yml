@@ -15,14 +15,18 @@ jobs:
     steps:
       - uses: actions/checkout@v7
 
-      - name: Disque — monter /mnt (74 Go) sur /nix AVANT d'installer Nix
+      - name: Disque — monter /mnt sur /nix si c'est un volume séparé
         run: |
           echo "=== avant ==="
           df -h / /mnt || true
-          sudo mkdir -p /mnt/nix /nix
-          sudo mount --bind /mnt/nix /nix
-          echo "=== après ==="
-          df -h /nix
+          if [ -d /mnt ] && [ "$(df --output=target /mnt | tail -1)" = "/mnt" ]; then
+            sudo mkdir -p /mnt/nix /nix
+            sudo mount --bind /mnt/nix /nix
+            echo "=== /nix monté sur /mnt ==="
+          else
+            echo "=== /mnt absent ou sur le même fs que / : le disque racine suffit ==="
+          fi
+          df -h / || true
           echo "cpu: $(nproc) | ram: $(free -g | awk '/^Mem:/{print $2}') Go"
 
       - uses: cachix/install-nix-action@v31
@@ -68,7 +72,7 @@ jobs:
             nix path-info -S .#packages.aarch64-linux.ffmpeg-v4l2request .#packages.aarch64-linux.kodi |
               awk '{printf "| %s | %.1f Mio |\n", $1, $2/1048576}'
             echo
-            echo "fermeture kodi : $(nix path-info -rS .#packages.aarch64-linux.kodi | awk '{s+=$2} END {printf "%.2f Gio", s/1073741824}')"
+            echo "fermeture kodi (sortie « out ») : $(nix path-info -S --json .#packages.aarch64-linux.kodi | jq -r '[.[].closureSize] | max / 1073741824 | "\(. * 100 | round / 100) Gio"')"
             echo
             df -h /nix
           } | tee rapport.txt | tee -a "$GITHUB_STEP_SUMMARY"
