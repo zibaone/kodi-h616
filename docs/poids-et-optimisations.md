@@ -64,7 +64,7 @@ le fait chez lui.
 
 **`wlroots` sans XWayland** : ne concerne que `cage`, absent de ce dépôt.
 
-**`mesa` sans LLVM (~700 Mio)** : le prochain gros levier, mais il faut savoir
+**`mesa` sans LLVM (532 Mio mesurés, `llvm-21.1.8-lib`)** : le prochain gros levier, mais il faut savoir
 quel driver GPU la cible utilise réellement. Sur H618 (Mali G31) c'est
 `panfrost`, donc LLVM ne sert qu'au rendu logiciel de secours (`llvmpipe`).
 Le couper signifie : si le GPU n'est pas exposé au client, plus aucun rendu.
@@ -90,12 +90,44 @@ global, pour que l'overlay reste non invasif pour les consommateurs.
 
 Union des fermetures + systemd + noyau + firmware, compressée en zstd.
 
-| | GiB |
-|---|---|
-| somme naïve des deux fermetures | 2,4 |
-| union après retrait de SDL | ~1,4 (dont ~1,0 de mesa/LLVM) |
-| système complet décompressé | 2,5–3,5 (estimé) |
-| `.img.zst` attendu | 1,2–1,5 (estimé) |
+Mesuré sur une image `sd-card` aarch64 construite avec ce dépôt (Kodi kiosque,
+noyau 7.0.14, systemd 260.5) :
 
-Les deux dernières lignes seront remplacées par des mesures dès qu'une image
-aarch64 sera construite.
+| | GiB | mesure |
+|---|---|---|
+| fermeture du système (NAR) | **3,61** | `nix path-info -S` sur le toplevel |
+| image décompressée | **5,60** | `zstd -l` |
+| `.img.zst` | **1,66** | ratio 3,37 — 4 h 57 de build, majoritairement sous qemu |
+
+L'écart entre 3,61 et 5,60 n'est pas du contenu : c'est la partition racine
+dimensionnée large (`rootPartitionSize` par défaut). La ramener à « fermeture
++ 512 Mio » ne change rien au système installé et fait tomber l'image autour de
+4 Gio décompressé.
+
+### Où sont les octets (mesuré, `narSize` de chaque chemin)
+
+| Mio | chemin | caractère |
+|---|---|---|
+| 825 | `linux-firmware` complet | ❌ défaut du module de carte, inutile sans Wi-Fi/BT |
+| 532 | `llvm-21.1.8-lib` | ❌ tiré par `mesa` (llvmpipe) |
+| 261 | `mesa` | ✅ |
+| 197 | source nixpkgs | ❌ aucun paquet ne devrait l'embarquer |
+| 141 | `deno` | ✅ délibéré (runtime JS exigé par `yt-dlp`) |
+| 131 | `python3-3.13` | ✅ (env Kodi + yt-dlp) |
+| 75 | `kodi` | ✅ |
+| 73 | `systemd` | ✅ structurel |
+| 58 | modules noyau | ✅ |
+| 57 + 43 | `perl`, `vim` | ❌ héritage d'une base « boîte à outils » |
+
+Trois leviers d'image, non applicables depuis ce dépôt — ils dépendent de
+l'hôte qui assemble l'image :
+
+| levier | gain | remarque |
+|---|---|---|
+| firmware restreint à la carte | ~825 Mio | `hardware.enableRedistributableFirmware` est vrai par défaut |
+| `mesa` sans LLVM | ~532 Mio | voir plus haut : à décider sur matériel |
+| base de paquets allégée | ~300 Mio | un kit de secours (btrfs, ddrescue, efibootmgr) n'a rien à faire dans une image Kodi sur ext4/ARM |
+
+Reste la limite structurelle : ~300 Mo pour LibreELEC (buildroot, busybox, ni
+systemd ni store) contre ~2 Gio pour un NixOS élagué. La comparaison vaut pour
+le téléchargement, pas pour la conception.
