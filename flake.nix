@@ -55,13 +55,47 @@
 
       # Contrat hwaccel : h264 et hevc exposent DRM_PRIME / HW_DEVICE_CTX /
       # device_type DRM. C'est ce que FindHWConfig() de Kodi 21.3 exige.
-      checks = forAll (pkgs: {
-        hwconfig = self.packages.${pkgs.system}.ffmpeg-v4l2request.passthru.tests.hwconfigTest;
-      });
+      #
+      # `kiosk-closure` n'est pas un test : c'est un prétexte pour que la CI
+      # construise les paquets *système* élagués (mesa, pipewire, v4l-utils,
+      # ffmpeg-headless, sdl3). Sans lui, la CI ne voit jamais ces dérivations,
+      # le cache ne les contient pas, et l'assemblage d'image les recompile
+      # sous émulation — 1 h 30 pour un mesa.
+      checks = nixpkgs.lib.genAttrs systems (
+        system:
+        let
+          kiosk = import nixpkgs {
+            inherit system;
+            overlays = [
+              self.overlays.default
+              self.overlays.kiosk
+            ];
+          };
+        in
+        {
+          hwconfig = self.packages.${system}.ffmpeg-v4l2request.passthru.tests.hwconfigTest;
+          kiosk-closure = kiosk.buildEnv {
+            name = "kiosk-closure";
+            paths = with kiosk; [
+              mesa
+              pipewire
+              wlroots_0_20
+              v4l-utils
+              ffmpeg-headless
+              sdl3
+            ];
+          };
+        }
+      );
 
       # Réutilisable par un flake NixOS : mêmes paquets, mêmes optimisations,
       # sans dupliquer les définitions.
       overlays.default = import ./overlays/v4l2-request.nix;
+
+      # Niveau 2, opt-in : élagage des paquets *système* du profil kiosque
+      # (pipewire, wlroots, v4l-utils, ffmpeg-headless). Séparé parce que ça
+      # change le comportement d'un système, pas seulement l'arbre de kodi.
+      overlays.kiosk = import ./overlays/kiosk.nix;
 
       formatter = forAll (pkgs: pkgs.nixfmt-rfc-style);
     };

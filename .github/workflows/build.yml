@@ -78,6 +78,17 @@ jobs:
           d=$(( $(date +%s) - s ))
           echo "| gate | ${d}s |" | tee -a "$GITHUB_STEP_SUMMARY"
 
+      # Fermeture kiosque : les paquets *système* de l'image (mesa, pipewire,
+      # wlroots, v4l-utils, ffmpeg-headless, sdl3) construits avec les deux
+      # overlays. C'est ce qui alimente le cache pour l'assemblage local —
+      # sans ça, un trim d'image se recompile sous qemu (mesa : 1 h 30).
+      - name: Build fermeture kiosque (chronométré)
+        run: |
+          s=$(date +%s)
+          nix build -L .#checks.aarch64-linux.kiosk-closure
+          d=$(( $(date +%s) - s ))
+          echo "| kiosk-closure | ${d}s |" | tee -a "$GITHUB_STEP_SUMMARY"
+
       # Le daemon de cachix-action annonce « Pushed » des chemins qu'il
       # n'envoie jamais : sur le run 39595259213, ffmpeg-*-bin et ffmpeg-*
       # sont restés absents du cache (404) malgré un log « Pushed » et zéro
@@ -92,12 +103,14 @@ jobs:
           set -euo pipefail
           paths=$(nix path-info -r \
             .#packages.aarch64-linux.kodi \
-            .#packages.aarch64-linux.ffmpeg-v4l2request | tr '\n' ' ')
+            .#packages.aarch64-linux.ffmpeg-v4l2request \
+            .#checks.aarch64-linux.kiosk-closure | tr '\n' ' ')
           cachix push havenos $paths
           echo "— contrôle des sorties attendues —"
           for p in \
             $(nix path-info .#packages.aarch64-linux.kodi) \
-            $(nix path-info .#packages.aarch64-linux.ffmpeg-v4l2request); do
+            $(nix path-info .#packages.aarch64-linux.ffmpeg-v4l2request) \
+            $(nix path-info .#checks.aarch64-linux.kiosk-closure); do
             h=$(basename "$p" | cut -c1-32)
             code=$(curl -s -o /dev/null -w '%{http_code}' "https://havenos.cachix.org/$h.narinfo")
             echo "$code  $(basename "$p")"

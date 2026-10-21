@@ -70,10 +70,24 @@ décodage complet (AV1 via `dav1d`). `ffplay` et SDL2 sont coupés — inutiles 
 une image kiosque, et ils tiraient GTK4. Kodi perd en plus `bluez`, `libplist`
 et `lirc`.
 
-**Niveau 2 — non inclus**, car ce sont des services système et non des paquets
-de kodi : `pipewire` élagué (gstreamer, bluez5, libcamera), `wlroots` sans
-XWayland, `ffmpeg-headless`. Les couper ici retirerait l'audio Bluetooth et le
-support des webcams à quiconque consomme l'overlay.
+**Niveau 2 — `overlays.kiosk`, à demander explicitement** : `pipewire` élagué
+(gstreamer, bluez5, libcamera), `wlroots` sans XWayland, `v4l-utils` sans ses
+GUI Qt, `ffmpeg-headless` sans encodeurs. Ce sont des paquets système : les
+appliquer d'office retirerait l'audio Bluetooth, le XWayland ou les webcams à
+quiconque importe le flake. D'où un second overlay, opt-in :
+
+```nix
+nixpkgs.overlays = [
+  nix-v4l2-request.overlays.default
+  nix-v4l2-request.overlays.kiosk   # seulement si l'on veut un kiosque
+];
+```
+
+Il sert aussi de **cible de construction pour la CI** : `checks.<system>.kiosk-closure`
+construit ces paquets avec les deux overlays, si bien que le cache contient les
+dérivations exactes dont une image a besoin. Sans ça, le moindre élagage côté
+image change un chemin de store que personne n'a mis en cache, et il faut
+recompiler `mesa` sous émulation — 1 h 30 mesurées.
 
 ## État vérifié
 
