@@ -6,6 +6,10 @@ name: build-aarch64
 #   3. que le gate hwconfig passe sur aarch64 (il n'avait été validé qu'en x86).
 on:
   push:
+    paths-ignore:
+      - '**.md'
+      - 'docs/**'
+      - 'LICENSE'
   workflow_dispatch:
 
 jobs:
