@@ -78,6 +78,32 @@ jobs:
           d=$(( $(date +%s) - s ))
           echo "| gate | ${d}s |" | tee -a "$GITHUB_STEP_SUMMARY"
 
+      # Le daemon de cachix-action annonce « Pushed » des chemins qu'il
+      # n'envoie jamais : sur le run 39595259213, ffmpeg-*-bin et ffmpeg-*
+      # sont restés absents du cache (404) malgré un log « Pushed » et zéro
+      # erreur. On ne fait donc pas confiance au post-traitement pour les
+      # sorties qui comptent : push explicite de la fermeture, puis contrôle
+      # du narinfo — le badge vert ne prouve rien.
+      - name: Publier les sorties au cache (explicite)
+        env:
+          CACHIX_AUTH_TOKEN: ${{ secrets.CACHIX_AUTH_TOKEN }}
+          CACHIX_SIGNING_KEY: ${{ secrets.CACHIX_SIGNING_KEY }}
+        run: |
+          set -euo pipefail
+          paths=$(nix path-info -r \
+            .#packages.aarch64-linux.kodi \
+            .#packages.aarch64-linux.ffmpeg-v4l2request | tr '\n' ' ')
+          cachix push havenos $paths
+          echo "— contrôle des sorties attendues —"
+          for p in \
+            $(nix path-info .#packages.aarch64-linux.kodi) \
+            $(nix path-info .#packages.aarch64-linux.ffmpeg-v4l2request); do
+            h=$(basename "$p" | cut -c1-32)
+            code=$(curl -s -o /dev/null -w '%{http_code}' "https://havenos.cachix.org/$h.narinfo")
+            echo "$code  $(basename "$p")"
+            test "$code" = "200"
+          done
+
       - name: Mesures (tailles réelles)
         run: |
           {
