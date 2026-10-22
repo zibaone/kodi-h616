@@ -1,19 +1,29 @@
-name: build-aarch64
+name: build
 
-# Vérifie trois choses sur un runner ARM natif, sans nixbian ni noyau :
-#   1. le disque : la fermeture tient-elle sur le runner (/mnt monté sur /nix) ?
-#   2. la durée réelle de ffmpeg + kodi, comparée aux 12 h+ en émulation ;
-#   3. que le gate hwconfig passe sur aarch64 (il n'avait été validé qu'en x86).
+# Trois vérifications, sur runner ARM natif, sans nixbian ni noyau :
+#   1. le contrat hwaccel (h264 + hevc → DRM_PRIME / HW_DEVICE_CTX / DRM) ;
+#   2. que la fermeture kiosque se construise et atterrisse au cache ;
+#   3. le formatage et l'évaluation complète du flake (`nix flake check`).
+#
+# Plus un job x86_64 sur runner GitHub standard : le gate hwconfig y était
+# annoncé « passe » dans le README sans qu'aucune CI ne le construise.
 on:
   push:
+    branches: [master]
     paths-ignore:
       - '**.md'
       - 'docs/**'
       - 'LICENSE'
+  pull_request:
   workflow_dispatch:
 
+# Un push pendant un build de 50 min ne doit pas en lancer un second.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
-  build:
+  build-aarch64:
     runs-on: ubuntu-24.04-arm
     timeout-minutes: 150
     steps:
@@ -48,7 +58,11 @@ jobs:
       # Sans le second, cachix-action échoue en post-traitement : c'est
       # pourquoi `skipPush` avait été posé, puis retiré une fois la clé en
       # place. Ne pas remettre l'un sans l'autre.
+      #
+      # Sur une PR venue d'un fork, les secrets sont absents : on saute la
+      # publication, la construction reste vérifiée.
       - uses: cachix/cachix-action@v17
+        if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
         with:
           name: havenos
           authToken: '${{ secrets.CACHIX_AUTH_TOKEN }}'
@@ -59,6 +73,9 @@ jobs:
           nix --version
           uname -m
           df -h /nix
+
+      - name: Formatage et évaluation (`nix flake check`)
+        run: nix flake check -L
 
       - name: Build ffmpeg v4l2-request (chronométré)
         run: |
@@ -74,6 +91,16 @@ jobs:
           d=$(( $(date +%s) - s ))
           echo "| kodi | ${d}s |" | tee -a "$GITHUB_STEP_SUMMARY"
 
+      # Variante consommée par l'image : kodi lié aux paquets système élagués,
+      # sans seconde copie de pipewire. Si elle n'est pas construite ici, elle
+      # n'est pas au cache et l'image la recompile sous qemu.
+      - name: Build kodi variante kiosque (chronométré)
+        run: |
+          s=$(date +%s)
+          nix build -L .#packages.aarch64-linux.kodi-kiosk
+          d=$(( $(date +%s) - s ))
+          echo "| kodi-kiosk | ${d}s |" | tee -a "$GITHUB_STEP_SUMMARY"
+
       - name: Gate hwconfig (h264 + hevc → DRM_PRIME / HW_DEVICE_CTX / DRM)
         run: |
           s=$(date +%s)
@@ -82,10 +109,11 @@ jobs:
           d=$(( $(date +%s) - s ))
           echo "| gate | ${d}s |" | tee -a "$GITHUB_STEP_SUMMARY"
 
-      # Fermeture kiosque : les paquets *système* de l'image (mesa, pipewire,
-      # wlroots, v4l-utils, ffmpeg-headless, sdl3) construits avec les deux
-      # overlays. C'est ce qui alimente le cache pour l'assemblage local —
-      # sans ça, un trim d'image se recompile sous qemu (mesa : 1 h 30).
+      # Fermeture kiosque : les paquets *système* de l'image (cage, mesa,
+      # pipewire, wireplumber, wlroots, v4l-utils, ffmpeg-headless) construits
+      # avec les deux overlays. C'est ce qui alimente le cache pour
+      # l'assemblage local — sans ça, un trim d'image se recompile sous qemu
+      # (mesa : 1 h 30).
       - name: Build fermeture kiosque (chronométré)
         run: |
           s=$(date +%s)
@@ -100,6 +128,7 @@ jobs:
       # sorties qui comptent : push explicite de la fermeture, puis contrôle
       # du narinfo — le badge vert ne prouve rien.
       - name: Publier les sorties au cache (explicite)
+        if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
         env:
           CACHIX_AUTH_TOKEN: ${{ secrets.CACHIX_AUTH_TOKEN }}
           CACHIX_SIGNING_KEY: ${{ secrets.CACHIX_SIGNING_KEY }}
@@ -107,12 +136,14 @@ jobs:
           set -euo pipefail
           paths=$(nix path-info -r \
             .#packages.aarch64-linux.kodi \
+            .#packages.aarch64-linux.kodi-kiosk \
             .#packages.aarch64-linux.ffmpeg-v4l2request \
             .#checks.aarch64-linux.kiosk-closure | tr '\n' ' ')
           cachix push havenos $paths
           echo "— contrôle des sorties attendues —"
           for p in \
             $(nix path-info .#packages.aarch64-linux.kodi) \
+            $(nix path-info .#packages.aarch64-linux.kodi-kiosk) \
             $(nix path-info .#packages.aarch64-linux.ffmpeg-v4l2request) \
             $(nix path-info .#checks.aarch64-linux.kiosk-closure); do
             h=$(basename "$p" | cut -c1-32)
@@ -126,10 +157,8 @@ jobs:
           {
             echo "| paquet | taille |"
             echo "|---|---|"
-            nix path-info -S .#packages.aarch64-linux.ffmpeg-v4l2request .#packages.aarch64-linux.kodi |
+            nix path-info -S .#packages.aarch64-linux.ffmpeg-v4l2request .#packages.aarch64-linux.kodi .#packages.aarch64-linux.kodi-kiosk |
               awk '{printf "| %s | %.1f Mio |\n", $1, $2/1048576}'
-            echo
-            echo "fermeture kodi (sortie « out ») : $(nix path-info -S --json .#packages.aarch64-linux.kodi | jq -r '[.[].closureSize] | max / 1073741824 | "\(. * 100 | round / 100) Gio"')"
             echo
             df -h /nix
           } | tee rapport.txt | tee -a "$GITHUB_STEP_SUMMARY"
@@ -139,3 +168,25 @@ jobs:
         with:
           name: rapport
           path: rapport.txt
+
+  # Le README annonçait « gate hwconfig sur x86_64 : passe » — mesure locale,
+  # jamais reproduite en CI. Ce job le rend vérifiable.
+  gate-x86_64:
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: cachix/install-nix-action@v31
+        with:
+          extra_nix_config: |
+            experimental-features = nix-command flakes
+            max-jobs = 4
+
+      - name: Gate hwconfig x86_64
+        run: |
+          nix build -L .#checks.x86_64-linux.hwconfig
+          cat result | tee -a "$GITHUB_STEP_SUMMARY"
+
+      - name: Formatage
+        run: nix build -L .#checks.x86_64-linux.formatting

@@ -14,12 +14,36 @@
 
       # Les optimisations de l'arbre kodi (overlays/v4l2-request.nix) sont
       # appliquées à la source : toutes les dépendances en bénéficient
-      # (libdecor, libavif, Pillow…), pas seulement le paquet kodi.
+      # (libdecor, cwiid, mesa-demos), pas seulement le paquet kodi.
       pkgsFor =
         system:
         import nixpkgs {
           inherit system;
           overlays = [ self.overlays.default ];
+        };
+
+      # Paquets système élagués (pipewire, wlroots, v4l-utils, ffmpeg-headless)
+      # — même instance que celle de l'image kiosque.
+      kioskFor =
+        system:
+        import nixpkgs {
+          inherit system;
+          overlays = [
+            self.overlays.default
+            self.overlays.kiosk
+          ];
+        };
+
+      mkPackages =
+        pkgs:
+        let
+          ffmpeg = mkFFmpeg pkgs;
+        in
+        {
+          ffmpeg-v4l2request = ffmpeg;
+          kodi = pkgs.callPackage ./pkgs/kodi {
+            ffmpeg-v4l2request = ffmpeg;
+          };
         };
 
       # Élagage des encodeurs : jamais utilisés en lecture (x265 ~24 Mo, x264,
@@ -45,46 +69,62 @@
         };
     in
     {
-      packages = forAll (pkgs: {
-        ffmpeg-v4l2request = mkFFmpeg pkgs;
-        kodi = pkgs.callPackage ./pkgs/kodi {
-          ffmpeg-v4l2request = mkFFmpeg pkgs;
-        };
-        default = self.packages.${pkgs.system}.kodi;
-      });
+      packages = nixpkgs.lib.genAttrs systems (
+        system:
+        let
+          base = mkPackages (pkgsFor system);
+        in
+        base
+        // {
+          # Variante liée aux paquets *système* élagués. C'est elle que
+          # l'image kiosque consomme : kodi partage alors sa pipewire avec le
+          # système au lieu d'en embarquer une seconde copie (674 Mio de
+          # fermeture, dont 149 Mio uniques à la variante non élaguée).
+          kodi-kiosk = (mkPackages (kioskFor system)).kodi;
+          default = base.kodi;
+        }
+      );
 
       # Contrat hwaccel : h264 et hevc exposent DRM_PRIME / HW_DEVICE_CTX /
       # device_type DRM. C'est ce que FindHWConfig() de Kodi 21.3 exige.
       #
       # `kiosk-closure` n'est pas un test : c'est un prétexte pour que la CI
-      # construise les paquets *système* élagués (mesa, pipewire, v4l-utils,
-      # ffmpeg-headless, sdl3). Sans lui, la CI ne voit jamais ces dérivations,
-      # le cache ne les contient pas, et l'assemblage d'image les recompile
-      # sous émulation — 1 h 30 pour un mesa.
+      # construise les paquets *système* élagués (cage, mesa, pipewire,
+      # wireplumber, v4l-utils, ffmpeg-headless). Sans lui, la CI ne voit
+      # jamais ces dérivations, le cache ne les contient pas, et l'assemblage
+      # d'image les recompile sous émulation — 1 h 30 pour un mesa.
+      #
+      # `cage` est le compositeur que l'image lance : il doit être dans la
+      # liste, pas seulement wlroots. Inversement `sdl3` n'apparaît dans aucune
+      # fermeture d'image (ffmpeg construit avec withSdl2=false) : inutile.
       checks = nixpkgs.lib.genAttrs systems (
         system:
         let
-          kiosk = import nixpkgs {
-            inherit system;
-            overlays = [
-              self.overlays.default
-              self.overlays.kiosk
-            ];
-          };
+          kiosk = kioskFor system;
+          pkgs = pkgsFor system;
         in
         {
           hwconfig = self.packages.${system}.ffmpeg-v4l2request.passthru.tests.hwconfigTest;
           kiosk-closure = kiosk.buildEnv {
             name = "kiosk-closure";
             paths = with kiosk; [
+              cage
               mesa
               pipewire
+              wireplumber
               wlroots_0_20
               v4l-utils
               ffmpeg-headless
-              sdl3
             ];
           };
+
+          # Formatage : `nix flake check` devient le seul gate à retenir.
+          # `self` plutôt que `./.` pour que le chemin soit celui du dépôt
+          # évalué, pas du répertoire courant.
+          formatting = pkgs.runCommand "check-nixfmt" { nativeBuildInputs = [ pkgs.nixfmt ]; } ''
+            nixfmt --check ${self}/flake.nix ${self}/overlays/*.nix ${self}/pkgs/*/default.nix
+            touch $out
+          '';
         }
       );
 
@@ -97,6 +137,6 @@
       # change le comportement d'un système, pas seulement l'arbre de kodi.
       overlays.kiosk = import ./overlays/kiosk.nix;
 
-      formatter = forAll (pkgs: pkgs.nixfmt-rfc-style);
+      formatter = forAll (pkgs: pkgs.nixfmt);
     };
 }

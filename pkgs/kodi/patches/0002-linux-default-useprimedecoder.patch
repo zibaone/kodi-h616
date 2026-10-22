@@ -1,0 +1,12 @@
+diff --git a/system/settings/linux.xml b/system/settings/linux.xml
+--- a/system/settings/linux.xml
++++ b/system/settings/linux.xml
+@@ -165,7 +165,7 @@
+           <requirement>HAS_GLES</requirement>
+           <visible>false</visible>
+           <level>2</level>
+-          <default>false</default>
++          <default>true</default>
+           <control type="toggle" />
+         </setting>
+         <setting id="videoplayer.useprimedecoderforhw" type="boolean" parent="videoplayer.useprimedecoder" label="13438" help="36172">

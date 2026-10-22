@@ -53,15 +53,18 @@ let
   # contrat de Kodi 21.3 pour h264 et hevc. `ffmpeg -hwaccels` ne peut pas
   # servir de gate ici : il liste les AVHWDeviceType et le type V4L2REQUEST
   # n'existe que dans la série LibreELEC master (FFmpeg 7+).
-  hwconfigTest = runCommandLocal "ffmpeg-v4l2request-hwconfig" {
-    nativeBuildInputs = [ pkg-config ];
-    buildInputs = [ patched ];
-  } ''
-    ${stdenv.cc}/bin/cc -Wall -Wextra -Werror -O2 \
-      ${./test-hwconfig.c} -o check \
-      $(pkg-config --cflags --libs libavcodec libavutil)
-    ./check | tee "$out"
-  '';
+  hwconfigTest =
+    runCommandLocal "ffmpeg-v4l2request-hwconfig"
+      {
+        nativeBuildInputs = [ pkg-config ];
+        buildInputs = [ patched ];
+      }
+      ''
+        ${stdenv.cc}/bin/cc -Wall -Wextra -Werror -O2 \
+          ${./test-hwconfig.c} -o check \
+          $(pkg-config --cflags --libs libavcodec libavutil)
+        ./check | tee "$out"
+      '';
 in
 patched.overrideAttrs (old: {
   passthru = (old.passthru or { }) // {

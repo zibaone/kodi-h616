@@ -11,6 +11,18 @@
 #  - ffmpeg-headless : lié à pipewire, pas à kodi.
 #
 # Chaque entrée indique le gain mesuré dans le profil HavenOS.
+#
+# Il n'y a plus d'entrée `libavif` ni `python3Packages.pillow` : kodi 21.3 ne
+# lie pas libavif (0 occurrence dans sa fermeture, ni aom). Les deux overrides
+# ne servaient à rien et fuyaient par une chaîne de *documentation* :
+#   libavif → gd → graphviz(-nox) → wayland → wayland-protocols
+#           → mesa, vulkan-loader → ffmpeg-headless → pipewire
+# soit neuf paquets d'infrastructure reconstruits (mesa en tête, 1 h 30 sous
+# émulation) pour zéro octet gagné dans l'image. Mesure : sans eux, `pipewire`
+# revient exactement au drv de nixpkgs (`71mvxq2s…` au lieu de `wxq58hhx…`).
+#
+# Corollaire : ne jamais surcharger un paquet feuille sous prétexte qu'il est
+# « dans l'arbre de kodi » — vérifier d'abord qu'il y est vraiment.
 final: prev: {
   # outil de test OpenGL, tiré par kodi sans être utilisé à l'exécution.
   mesa-demos = prev.runCommand "mesa-demos-stub" { } ''
@@ -31,28 +43,4 @@ final: prev: {
       rm -f $out/bin/wmgui
     '';
   });
-
-  # libavif : kodi ne fait que décoder l'AVIF (dav1d) ; l'encodeur aom
-  # (~8 Mo) n'est jamais utilisé.
-  libavif = prev.libavif.overrideAttrs (old: {
-    cmakeFlags = map (
-      f: if f == "-DAVIF_CODEC_AOM=SYSTEM" then "-DAVIF_CODEC_AOM=OFF" else f
-    ) (old.cmakeFlags or [ ]);
-    propagatedBuildInputs = builtins.filter (
-      p: final.lib.getName p != "libaom"
-    ) (old.propagatedBuildInputs or [ ]);
-    doCheck = false;
-  });
-
-  # Pillow (via kodi.pythonPackages) : sa suite AVIF encode et exige aom,
-  # retiré ci-dessus. On ne désélectionne que ce fichier de tests.
-  python3Packages = prev.python3Packages.overrideScope (
-    _pyself: pysuper: {
-      pillow = pysuper.pillow.overrideAttrs (old: {
-        disabledTestPaths = (old.disabledTestPaths or [ ]) ++ [
-          "Tests/test_file_avif.py"
-        ];
-      });
-    }
-  );
 }

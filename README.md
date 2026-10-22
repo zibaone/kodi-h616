@@ -9,10 +9,12 @@ patché, et Kodi 21.3 qui l'utilise.
 
 ## Périmètre
 
-Ce dépôt fournit **deux paquets**, et rien d'autre :
+Ce dépôt fournit **deux paquets** (et une variante du second), rien d'autre :
 
 - `ffmpeg-v4l2request` — FFmpeg 6.1.6 + série LibreELEC `v4l2-request` ;
-- `kodi` — `kodi-wayland` 21.3 lié à ce ffmpeg, avec le backport xbmc#25467.
+- `kodi` — `kodi-wayland` 21.3 lié à ce ffmpeg, avec le backport xbmc#25467 ;
+- `kodi-kiosk` — le même kodi lié aux paquets système élagués de
+  `overlays.kiosk`, pour qu'une image kiosque n'ait qu'une pipewire.
 
 Il ne fournit **ni noyau, ni image, ni module NixOS**. Il ne dépend d'aucun dépôt
 de noyau : la compilation n'a besoin que des en-têtes V4L2 de `linux-headers`.
@@ -41,10 +43,17 @@ effet de bord, Kodi 21.3 accepte déjà `DRM`.
 ## Utilisation
 
 ```bash
-nix build .#kodi                    # kodi-wayland + ffmpeg v4l2-request
-nix build .#ffmpeg-v4l2request      # la couche ffmpeg seule
+nix build .#kodi                   # kodi-wayland + ffmpeg v4l2-request
+nix build .#kodi-kiosk             # idem, lié aux paquets système élagués
+nix build .#ffmpeg-v4l2request     # la couche ffmpeg seule
 nix build .#checks.$(nix eval --impure --raw --expr builtins.currentSystem).hwconfig
 ```
+
+`kodi` et `kodi-kiosk` ne diffèrent que par les paquets qu'ils lient : la
+seconde variante utilise `pipewire` élagué (niveau 2), donc une image qui
+applique aussi `overlays.kiosk` n'embarque **qu'une** copie de pipewire au lieu
+de deux. C'est la variante que consomme une image kiosque ; `kodi` reste la
+variante neutre.
 
 ## Le gate `hwconfig`
 
@@ -56,6 +65,31 @@ contrat que `FindHWConfig()` de Kodi 21.3 vérifie.
 `ffmpeg -hwaccels` ne peut pas servir de gate : il liste les `AVHWDeviceType`, et
 `V4L2REQUEST` n'existe que dans la série 7+.
 
+## Le réglage qui commande tout : `videoplayer.useprimedecoder`
+
+Avoir le bon ffmpeg et le bon patch ne suffit pas. Dans Kodi 21.3,
+`CDVDVideoCodecDRMPRIME::Create()` renvoie `nullptr` tant que
+`videoplayer.useprimedecoder` est faux
+(`xbmc/cores/VideoPlayer/DVDCodecs/Video/DVDVideoCodecDRMPRIME.cpp`) : le
+décodeur n'est jamais instancié, Kodi décode en CPU et **ne le signale pas**.
+
+Le défaut amont est `<default>false</default>`
+(`system/settings/linux.xml`). `pkgs/kodi/patches/0002-linux-default-useprimedecoder.patch`
+le bascule à `true`, et un `postPatch` vérifie la valeur finale dans le fichier
+— un patch de données peut s'appliquer ailleurs sans échouer.
+
+Conséquences :
+
+- le réglage reste visible dans l'UI (niveau 2) une fois le codec enregistré :
+  on peut le désactiver sans recompiler ;
+- si le décodeur n'ouvre pas son device (`/dev/dri/renderD128` par défaut,
+  `$KODI_RENDER_NODE` sinon — `DVDVideoCodecDRMPRIME.cpp:307-327`), `Open()`
+  renvoie `false` : `CDVDFactoryCodec` passe au décodeur matériel suivant puis,
+  `CODEC_ALLOW_FALLBACK` étant posé par défaut, au décodage logiciel. Le
+  basculement n'est donc pas irréversible — mais il coûte une tentative et une
+  ligne d'erreur par ouverture, ce qui est le prix d'un défaut à `true` sur une
+  machine sans VPU exploitable (x86 sans `/dev/video*` en Request API).
+
 ## Élagage
 
 Deux niveaux, séparés volontairement. Le détail chiffré et les leviers restants
@@ -63,12 +97,19 @@ sont dans [`docs/poids-et-optimisations.md`](docs/poids-et-optimisations.md).
 
 **Niveau 1 — appliqué par défaut** (`overlays/v4l2-request.nix`), ne touche que
 l'arbre de kodi : `mesa-demos` remplacé par un stub, `libdecor` sans le plugin
-GTK (→ pas de `gtk+3`), `cwiid` sans `wmgui` (GTK2), `libavif` sans l'encodeur
-aom, Pillow sans son test AVIF. Les encodeurs ffmpeg sont désactivés (`x264`,
-`x265`, `libvpx`, `libaom`, `svt-av1`, `rav1e`) : jamais utilisés en lecture,
-décodage complet (AV1 via `dav1d`). `ffplay` et SDL2 sont coupés — inutiles dans
-une image kiosque, et ils tiraient GTK4. Kodi perd en plus `bluez`, `libplist`
-et `lirc`.
+GTK (→ pas de `gtk+3`), `cwiid` sans `wmgui` (GTK2). Les encodeurs ffmpeg sont
+désactivés (`x264`, `x265`, `libvpx`, `libaom`, `svt-av1`, `rav1e`) : jamais
+utilisés en lecture, décodage complet (AV1 via `dav1d`). `ffplay` et SDL2 sont
+coupés — inutiles dans une image kiosque, et ils tiraient GTK4. Kodi perd en
+plus `bluez`, `libplist` et `lirc`.
+
+Ce niveau ne contient **plus** d'entrée `libavif` ni `Pillow` : kodi 21.3 ne lie
+pas libavif (zéro occurrence dans sa fermeture, `libaom` compris). Les deux
+overrides ne gagnaient rien et fuyaient par une chaîne de *documentation* —
+`libavif → gd → graphviz → wayland → wayland-protocols → mesa,
+vulkan-loader → ffmpeg-headless → pipewire` — soit neuf paquets d'infrastructure
+reconstruits, `mesa` en tête. Mesure : sans eux, `pipewire` revient exactement
+au dérivé de nixpkgs (`71mvxq2s…` au lieu de `wxq58hhx…`).
 
 **Niveau 2 — `overlays.kiosk`, à demander explicitement** : `pipewire` élagué
 (gstreamer, bluez5, libcamera), `wlroots` sans XWayland, `v4l-utils` sans ses
@@ -84,10 +125,18 @@ nixpkgs.overlays = [
 ```
 
 Il sert aussi de **cible de construction pour la CI** : `checks.<system>.kiosk-closure`
-construit ces paquets avec les deux overlays, si bien que le cache contient les
+construit `cage`, `mesa`, `pipewire`, `wireplumber`, `wlroots`, `v4l-utils` et
+`ffmpeg-headless` avec les deux overlays, si bien que le cache contient les
 dérivations exactes dont une image a besoin. Sans ça, le moindre élagage côté
 image change un chemin de store que personne n'a mis en cache, et il faut
 recompiler `mesa` sous émulation — 1 h 30 mesurées.
+
+Trois corrections dans cette liste : `cage` y manquait alors que c'est le
+compositeur que l'image lance (`wlroots` seul ne construit pas cage, et son
+narinfo était absent du cache — 404) ; `sdl3` y figurait alors qu'il n'apparaît
+dans aucune fermeture d'image (`withSdl2 = false`), donc il était reconstruit à
+chaque build pour rien. `wireplumber` manquait aussi, absent du cache et pourtant
+présent dans la fermeture d'exécution de l'image.
 
 ## État vérifié
 
@@ -95,8 +144,10 @@ recompiler `mesa` sous émulation — 1 h 30 mesurées.
 |---|---|
 | `nix build .#packages.aarch64-linux.ffmpeg-v4l2request` | construit en CI (runner ARM natif) |
 | `nix build .#packages.aarch64-linux.kodi` | construit en CI |
+| `nix build .#packages.aarch64-linux.kodi-kiosk` | construit en CI (variante consommée par l'image) |
 | gate `hwconfig` (h264 + hevc) sur aarch64 | passe : `pix_fmt=drm_prime methods=HW_DEVICE_CTX device_type=drm` |
-| gate `hwconfig` sur x86_64 | passe |
+| gate `hwconfig` sur x86_64 | construit par le job `gate-x86_64` (runner x86 natif) |
+| `nix flake check` (formatage inclus) | bloque la CI et protège `master` |
 | **décodage sur H618 réel** | **non fait** |
 
 Ce qui reste à prouver, et comment :
@@ -126,8 +177,29 @@ patch d'origine permet de le vérifier.
 
 ## CI
 
-`.github/workflows/build.yml` construit les deux paquets sur un runner ARM natif
+`.github/workflows/build.yml` construit les paquets sur un runner ARM natif
 (`ubuntu-24.04-arm`), chronomètre chaque étape et publie les tailles réelles
 (`nix path-info -S`) dans le résumé du run. Le montage de `/mnt` sur `/nix` est
 conditionnel : les runners actuels ont 145 Go sur `/`, le bind ne sert que si
 `/mnt` est un volume séparé.
+
+Le workflow tourne sur `push` vers `master`, sur `pull_request` et à la demande.
+`master` exige que ces jobs passent avant toute fusion.
+
+Trois gates, plus un job de parité :
+
+1. `nix flake check -L` — évaluation complète du flake **et** formatage
+   (`checks.<system>.formatting` lance `nixfmt --check` sur `flake.nix`,
+   `overlays/*.nix` et `pkgs/*/default.nix`). Un fichier mal formaté fait
+   échouer la CI, pas seulement un `nix fmt` local oublié ;
+2. `checks.<system>.hwconfig` — le contrat hwaccel ;
+3. `checks.<system>.kiosk-closure` — les paquets système élagués, poussés au
+   cache, avec un **contrôle de narinfo** après le push : le daemon de
+   `cachix-action` a déjà annoncé « Pushed » des chemins qu'il n'envoyait pas
+   (404 vérifiés), donc le badge vert ne suffit pas ;
+4. job `gate-x86_64` (`ubuntu-latest`) : le même gate `hwconfig` construit en
+   x86 natif. Il était annoncé « passe » dans ce README sur la foi d'une mesure
+   locale, sans qu'aucune CI ne le construise — c'est corrigé.
+
+`concurrency` annule le run précédent sur la même réf : un push pendant un build
+de 50 min ne doit pas en lancer un second.

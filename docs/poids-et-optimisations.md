@@ -52,15 +52,15 @@ Détail de la fermeture de ffmpeg avant correction — tout ça pour `ffplay` :
 | `mesa-demos` → stub | `overlays/v4l2-request.nix` | quelques Mio | estimé |
 | `libdecor` sans plugin GTK | idem | ~42 Mio (`gtk+3`) | estimé |
 | `cwiid` sans `wmgui` | idem | ~27 Mio (`gtk+2`) | estimé |
-| `libavif` sans aom | idem | ~8 Mio | estimé |
-| Pillow sans test AVIF | idem | — (correction de build) | — |
+| ~~`libavif` sans aom~~ | — | **retiré** : kodi ne lie pas libavif | mesuré : 0 occurrence de `libavif`/`aom`/`pillow` dans la fermeture de kodi |
 
 ## Leviers non appliqués, et pourquoi
 
 **`pipewire` élagué** (gstreamer, bluez5, libcamera) : c'est un service système,
 pas une dépendance de kodi. Le couper dans un overlay public retirerait l'audio
 Bluetooth et le support des webcams à quiconque le consomme. Le profil kiosque
-le fait chez lui.
+le fait chez lui — et depuis `packages.kodi-kiosk`, il le fait sans payer deux
+copies de pipewire dans l'image.
 
 **`wlroots` sans XWayland** : ne concerne que `cage`, absent de ce dépôt.
 
@@ -75,16 +75,29 @@ elles n'entrent pas dans l'image. `rustc` vient de
 `switch-to-configuration` (vérifié par `nix why-depends`). Utile seulement pour
 le disque d'un builder à froid.
 
-## Effet de bord connu
+## Effet de bord corrigé : la fuite `libavif`
 
-L'override `libavif` (aom désactivé) n'est pas confiné à kodi : `ffmpeg-headless`
-8.1 lie aussi libavif, donc son drv change, **et pipewire avec lui** (il utilise
-ffmpeg-headless dans ses plugins SPA). Constaté par comparaison des `inputDrvs` :
-seul `ffmpeg-headless` diffère, tout le reste est identique.
+L'override `libavif` (aom désactivé) n'était pas confiné à kodi — il ne servait
+même à rien pour kodi. Mesure : `nix-store -qR` sur la sortie de kodi ne contient
+**aucune** entrée `libavif`, `libaom` ni `pillow`. Ce que l'override changeait,
+c'était la *documentation* des paquets voisins :
 
-Conséquence en CI : le run reconstruit pipewire (~20 min) même quand on ne touche
-qu'à kodi. À corriger en surchargeant `libavif` **dans kodi** plutôt qu'au niveau
-global, pour que l'overlay reste non invasif pour les consommateurs.
+```
+libavif → gd → graphviz(-nox) → wayland → wayland-protocols
+        → mesa, vulkan-loader → ffmpeg-headless → pipewire
+```
+
+soit neuf paquets d'infrastructure reconstruits (et republiés au cache) pour un
+paquet que kodi ne lie pas. Vérification : avec l'override retiré,
+`pipewire` revient exactement au dérivé de nixpkgs (`71mvxq2s…` au lieu de
+`wxq58hhx…`), alors que l'ancienne analyse — « seul `ffmpeg-headless` diffère » —
+s'arrêtait au premier niveau et manquait le reste de la chaîne. L'override Pillow
+existait uniquement pour faire passer le test AVIF suite à la disparition d'aom :
+il tombe avec lui.
+
+Leçon générale : ne jamais surcharger un paquet au motif qu'il est « dans l'arbre
+de kodi » sans le vérifier dans la fermeture réelle ; `gd`, `graphviz` et
+`wayland` ne sont dans la fermeture de *construction* que comme outillage.
 
 ## Ce qui va dans une image
 
