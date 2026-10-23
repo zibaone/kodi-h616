@@ -9,7 +9,17 @@ Le contrat vérifié en CI porte sur la **construction** des paquets et sur le
 contrat hwaccel (`avcodec_get_hw_config`) ; le décodage sur H618 réel n'est
 toujours pas mesuré (voir le README, § État vérifié).
 
-## [Unreleased]
+## [0.2.0] - 2026-10-23
+
+### Added
+
+- `kodi-wayland` et `kodi-kiosk-wayland` : le même Kodi, fenêtré par Wayland,
+  pour le jour où un compositeur revient devant le lecteur. Sélection par
+  l'argument `windowing` (`"gbm"` par défaut, `"wayland"` en option), un seul
+  jeu de patches. `checks.<system>.kodi-wayland-eval` empêche que l'attribut
+  pourrisse sans que personne ne s'en aperçoive.
+- `docs/fenetrage-kodi-gbm.md` : décision, preuves, état amont et procédure de
+  retour à cage.
 
 ### Changed
 
