@@ -76,11 +76,28 @@ Kodi prend directement la main sur le nœud DRM : plus de compositeur.
 
 ## Revenir à cage (si l'amont corrige le défaut)
 
-Le correctif amont est en revue (<https://github.com/xbmc/xbmc/pull/27894>,
-« Move Initialize() before SetFullScreen() »). Quand la version de Kodi retenue
-l'inclut, la bascule ne demande **aucune modification du paquet** : il expose
-déjà les deux fenêtrages (argument `windowing`, attributs `kodi-wayland` et
-`kodi-kiosk-wayland`).
+État amont au 23 octobre 2026 — aucun correctif n'existe, ni en release ni dans
+`master` :
+
+| Réf | Date | État |
+| --- | --- | --- |
+| xbmc#20629 | 5 déc. 2021 | fermé le 12 mai 2025 comme *stale* (« Issue Cleanup: Closed »), **sans correctif** |
+| xbmc#20632 | 5 déc. 2021 | tentative de correctif, fermée **sans merge** le 12 mai 2025 |
+| xbmc#27882 | 18 févr. 2026 | **ouvert** |
+| xbmc#27894 | 22 févr. 2026 | fermée par son auteur le 16 mai 2026, **non mergée** ; un relecteur a mesuré qu'elle casse le retour au mode fenêtré (`\`) |
+
+Vérifié dans `master` : `WinSystemWayland.cpp` appelle toujours
+`m_shellSurface->SetFullScreen()` (l. 349) **avant** `m_shellSurface->Initialize()`
+(l. 360) — l'ordre fautif est intact. Dernière release : `21.3-Omega`
+(31 oct. 2025).
+
+La bascule GBM n'est donc **pas un contournement en attente d'un correctif
+imminent** : c'est la seule voie qui fonctionne aujourd'hui. La procédure
+ci-dessous reste dormante jusqu'à ce qu'un correctif amont existe.
+
+Quand ce sera le cas, la bascule ne demande **aucune modification du paquet** :
+il expose déjà les deux fenêtrages (argument `windowing`, attributs
+`kodi-wayland` et `kodi-kiosk-wayland`).
 
 1. Dans le profil HavenOS, consommer `kodi-kiosk-wayland` au lieu de
    `kodi-kiosk`, retirer `--windowing=gbm` du lanceur, et rétablir
