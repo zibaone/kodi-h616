@@ -11,6 +11,19 @@ toujours pas mesuré (voir le README, § État vérifié).
 
 ## [Unreleased]
 
+### Changed
+
+- **Kiosque en GBM direct, sans compositeur.** `kodi` est désormais basé sur
+  `kodi-gbm` (et non `kodi-wayland`). Sous cage comme sous weston, Kodi
+  demandait le plein écran *avant* le mapping de sa surface (xbmc#20629,
+  #27882) ; le compositeur ignorait la requête, Kodi n'obtenait jamais de taille
+  valide (mesuré : `3830x2117` au lieu de `3840x2160`) et n'affichait rien —
+  écran noir avec une bordure d'un pixel, alors que le GPU, le décodeur et le
+  compositeur fonctionnaient (client EGL de même format/modifier/taille
+  affiché). Validé sur Orange Pi Zero 3 : interface affichée, `GLES 3.1` sur
+  `Mali-G31 (Panfrost)`. Décision, preuves et procédure de retour à cage :
+  `docs/fenetrage-kodi-gbm.md`.
+
 ## [0.1.0] - 2026-10-22
 
 Première version étiquetée. Base : Kodi 21.3, FFmpeg 6.1.6 + série LibreELEC

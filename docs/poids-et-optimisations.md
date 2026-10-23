@@ -62,7 +62,8 @@ Bluetooth et le support des webcams à quiconque le consomme. Le profil kiosque
 le fait chez lui — et depuis `packages.kodi-kiosk`, il le fait sans payer deux
 copies de pipewire dans l'image.
 
-**`wlroots` sans XWayland** : ne concerne que `cage`, absent de ce dépôt.
+**`wlroots` sans XWayland** : ne concerne que `cage`, que l'image ne lance
+plus depuis le passage du kiosque en GBM direct (`docs/fenetrage-kodi-gbm.md`).
 
 **`mesa` sans LLVM (532 Mio mesurés, `llvm-21.1.8-lib`)** : le prochain gros levier, mais il faut savoir
 quel driver GPU la cible utilise réellement. Sur H618 (Mali G31) c'est

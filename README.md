@@ -12,7 +12,7 @@ patché, et Kodi 21.3 qui l'utilise.
 Ce dépôt fournit **deux paquets** (et une variante du second), rien d'autre :
 
 - `ffmpeg-v4l2request` — FFmpeg 6.1.6 + série LibreELEC `v4l2-request` ;
-- `kodi` — `kodi-wayland` 21.3 lié à ce ffmpeg, avec le backport xbmc#25467 ;
+- `kodi` — `kodi-gbm` 21.3 lié à ce ffmpeg, avec le backport xbmc#25467 ;
 - `kodi-kiosk` — le même kodi lié aux paquets système élagués de
   `overlays.kiosk`, pour qu'une image kiosque n'ait qu'une pipewire.
 
@@ -43,7 +43,7 @@ effet de bord, Kodi 21.3 accepte déjà `DRM`.
 ## Utilisation
 
 ```bash
-nix build .#kodi                   # kodi-wayland + ffmpeg v4l2-request
+nix build .#kodi                   # kodi-gbm + ffmpeg v4l2-request
 nix build .#kodi-kiosk             # idem, lié aux paquets système élagués
 nix build .#ffmpeg-v4l2request     # la couche ffmpeg seule
 nix build .#checks.$(nix eval --impure --raw --expr builtins.currentSystem).hwconfig
@@ -125,18 +125,21 @@ nixpkgs.overlays = [
 ```
 
 Il sert aussi de **cible de construction pour la CI** : `checks.<system>.kiosk-closure`
-construit `cage`, `mesa`, `pipewire`, `wireplumber`, `wlroots`, `v4l-utils` et
-`ffmpeg-headless` avec les deux overlays, si bien que le cache contient les
-dérivations exactes dont une image a besoin. Sans ça, le moindre élagage côté
-image change un chemin de store que personne n'a mis en cache, et il faut
-recompiler `mesa` sous émulation — 1 h 30 mesurées.
+construit `mesa`, `pipewire`, `wireplumber`, `v4l-utils` et `ffmpeg-headless`
+avec les deux overlays, si bien que le cache contient les dérivations exactes
+dont une image a besoin. Sans ça, le moindre élagage côté image change un chemin
+de store que personne n'a mis en cache, et il faut recompiler `mesa` sous
+émulation — 1 h 30 mesurées.
 
-Trois corrections dans cette liste : `cage` y manquait alors que c'est le
-compositeur que l'image lance (`wlroots` seul ne construit pas cage, et son
-narinfo était absent du cache — 404) ; `sdl3` y figurait alors qu'il n'apparaît
+Deux corrections dans cette liste : `sdl3` y figurait alors qu'il n'apparaît
 dans aucune fermeture d'image (`withSdl2 = false`), donc il était reconstruit à
-chaque build pour rien. `wireplumber` manquait aussi, absent du cache et pourtant
+chaque build pour rien ; `wireplumber` manquait, absent du cache et pourtant
 présent dans la fermeture d'exécution de l'image.
+
+`cage` et `wlroots` y figurent encore alors que l'image ne les lance plus depuis
+le passage du kiosque en **GBM direct** (voir `docs/fenetrage-kodi-gbm.md`) : ils
+restent dans la cible tant que ce retrait n'est pas fait, mais ne maintiennent
+plus qu'un cache pour une architecture abandonnée.
 
 ## État vérifié
 
