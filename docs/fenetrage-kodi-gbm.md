@@ -78,19 +78,27 @@ Kodi prend directement la main sur le nœud DRM : plus de compositeur.
 
 Le correctif amont est en revue (<https://github.com/xbmc/xbmc/pull/27894>,
 « Move Initialize() before SetFullScreen() »). Quand la version de Kodi retenue
-l'inclut :
+l'inclut, la bascule ne demande **aucune modification du paquet** : il expose
+déjà les deux fenêtrages (argument `windowing`, attributs `kodi-wayland` et
+`kodi-kiosk-wayland`).
 
-1. Dans `pkgs/kodi/default.nix`, rebasculer la base :
-   `kodi-gbm` → `kodi-wayland` (et retirer `--windowing=gbm` du lanceur).
-2. Dans le profil HavenOS, rétablir `services.cage = { enable = true; user =
-   "kodi"; program = kodiLauncher; }` à la place du service `kodi-gbm`, avec les
-   deux variables d'environnement wlroots nécessaires sur une board sans GPU
-   (`WLR_RENDERER_ALLOW_SOFTWARE`, `WLR_LIBINPUT_NO_DEVICES`) — voir l'historique
-   du profil avant le commit « kiosque GBM direct ».
+1. Dans le profil HavenOS, consommer `kodi-kiosk-wayland` au lieu de
+   `kodi-kiosk`, retirer `--windowing=gbm` du lanceur, et rétablir
+   `services.cage = { enable = true; user = "kodi"; program = kodiLauncher; }`
+   avec `WLR_RENDERER_ALLOW_SOFTWARE` et `WLR_LIBINPUT_NO_DEVICES` sur l'unité
+   (board dont le GPU peut échouer au probe) — voir l'historique du profil avant
+   le commit « kiosque GBM direct ».
+2. Réintégrer `cage` et `wlroots` dans `checks.kiosk-closure` : ils en sont
+   sortis avec la bascule, et sans eux la CI ne mettra pas en cache ce dont
+   l'image a besoin (c'est mesuré : 1 h 30 de `mesa` sous émulation).
 3. **Vérifier avant de flasher**, avec le test qui a servi ici : lancer un client
    EGL de la taille et du format de Kodi sous le compositeur (il doit s'afficher),
    puis Kodi. Si Kodi reste noir alors que le client s'affiche, le correctif
    n'est pas dans la version utilisée — ne pas déployer.
+
+La variante Wayland n'est pas compilée par la CI (elle doublerait le build de
+Kodi) mais son évaluation est vérifiée par `checks.kodi-wayland-eval` : elle ne
+peut pas pourrir en silence.
 
 Ne pas rebasculer « pour l'élégance » : cage ajoute une couche qui n'apporte rien
 tant qu'aucun second client n'est nécessaire.

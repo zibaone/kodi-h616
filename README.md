@@ -13,8 +13,12 @@ Ce dépôt fournit **deux paquets** (et une variante du second), rien d'autre :
 
 - `ffmpeg-v4l2request` — FFmpeg 6.1.6 + série LibreELEC `v4l2-request` ;
 - `kodi` — `kodi-gbm` 21.3 lié à ce ffmpeg, avec le backport xbmc#25467 ;
+- `kodi-wayland` — le même Kodi, mêmes patches, fenêtrage Wayland
+  (`windowing = "wayland"`) : le paquet à consommer si l'on remet un compositeur
+  devant le lecteur. Voir `docs/fenetrage-kodi-gbm.md` ;
 - `kodi-kiosk` — le même kodi lié aux paquets système élagués de
-  `overlays.kiosk`, pour qu'une image kiosque n'ait qu'une pipewire.
+  `overlays.kiosk`, pour qu'une image kiosque n'ait qu'une pipewire
+  (`kodi-kiosk-wayland` en est la variante Wayland).
 
 Il ne fournit **ni noyau, ni image, ni module NixOS**. Il ne dépend d'aucun dépôt
 de noyau : la compilation n'a besoin que des en-têtes V4L2 de `linux-headers`.
