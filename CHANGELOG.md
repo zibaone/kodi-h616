@@ -9,6 +9,17 @@ Le contrat vérifié en CI porte sur la **construction** des paquets et sur le
 contrat hwaccel (`avcodec_get_hw_config`) ; le décodage sur H618 réel n'est
 toujours pas mesuré (voir le README, § État vérifié).
 
+## [Unreleased]
+
+### Added
+
+- `docs/domaine-alimentation-gpu.md` : le domaine d'alimentation du GPU
+  (`sun50i_h6_prcm_ppu`) est un module dans la config sunxi64, et son ordre de
+  sonde avec panfrost n'est pas garanti — mesuré : `-110`, pas de
+  `renderD128`, donc ni EGL pour Kodi ni hwaccel v4l2-request. Contournement
+  par chargement depuis l'initrd, procédure de migration vers
+  `CONFIG_SUN50I_H6_PRCM_PPU=y` et pièges à éviter.
+
 ## [0.2.0] - 2026-10-23
 
 ### Added
