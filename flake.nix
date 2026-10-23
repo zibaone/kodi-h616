@@ -44,6 +44,13 @@
           kodi = pkgs.callPackage ./pkgs/kodi {
             ffmpeg-v4l2request = ffmpeg;
           };
+          # Même Kodi, mêmes patches, fenêtrage Wayland : c'est le paquet à
+          # consommer si l'on remet un compositeur devant le lecteur (voir
+          # docs/fenetrage-kodi-gbm.md).
+          kodi-wayland = pkgs.callPackage ./pkgs/kodi {
+            ffmpeg-v4l2request = ffmpeg;
+            windowing = "wayland";
+          };
         };
 
       # Élagage des encodeurs : jamais utilisés en lecture (x265 ~24 Mo, x264,
@@ -81,6 +88,10 @@
           # système au lieu d'en embarquer une seconde copie (674 Mio de
           # fermeture, dont 149 Mio uniques à la variante non élaguée).
           kodi-kiosk = (mkPackages (kioskFor system)).kodi;
+          # Même variante pour un kiosque à compositeur : ce que l'image
+          # consommerait si l'on rebasculait sur cage.
+          kodi-kiosk-wayland = (mkPackages (kioskFor system)).kodi-wayland;
+          kodi-wayland = base.kodi-wayland;
           default = base.kodi;
         }
       );
@@ -89,14 +100,15 @@
       # device_type DRM. C'est ce que FindHWConfig() de Kodi 21.3 exige.
       #
       # `kiosk-closure` n'est pas un test : c'est un prétexte pour que la CI
-      # construise les paquets *système* élagués (cage, mesa, pipewire,
+      # construise les paquets *système* élagués (mesa, pipewire,
       # wireplumber, v4l-utils, ffmpeg-headless). Sans lui, la CI ne voit
       # jamais ces dérivations, le cache ne les contient pas, et l'assemblage
       # d'image les recompile sous émulation — 1 h 30 pour un mesa.
       #
-      # `cage` est le compositeur que l'image lance : il doit être dans la
-      # liste, pas seulement wlroots. Inversement `sdl3` n'apparaît dans aucune
-      # fermeture d'image (ffmpeg construit avec withSdl2=false) : inutile.
+      # `cage` et `wlroots` en sont sortis avec le passage du kiosque en GBM
+      # direct (docs/fenetrage-kodi-gbm.md) : aucune fermeture d'image ne les
+      # contient plus, les y laisser n'entretenait qu'un cache pour une
+      # architecture abandonnée.
       checks = nixpkgs.lib.genAttrs systems (
         system:
         let
@@ -108,15 +120,22 @@
           kiosk-closure = kiosk.buildEnv {
             name = "kiosk-closure";
             paths = with kiosk; [
-              cage
               mesa
               pipewire
               wireplumber
-              wlroots_0_20
               v4l-utils
               ffmpeg-headless
             ];
           };
+
+          # Les variantes Wayland ne sont pas compilées par la CI (elles
+          # doubleraient le build de Kodi), mais leur évaluation est vérifiée :
+          # une variante de repli qui n'évalue plus ne se découvrirait qu'au
+          # moment précis où l'on en a besoin.
+          kodi-wayland-eval = pkgs.runCommand "check-kodi-wayland-eval" { } ''
+            echo ${self.packages.${system}.kodi-wayland.drvPath} > $out
+            echo ${self.packages.${system}.kodi-kiosk-wayland.drvPath} >> $out
+          '';
 
           # Formatage : `nix flake check` devient le seul gate à retenir.
           # `self` plutôt que `./.` pour que le chemin soit celui du dépôt

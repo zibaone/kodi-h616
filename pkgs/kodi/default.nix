@@ -21,10 +21,18 @@
 {
   lib,
   kodi-gbm,
+  kodi-wayland,
   ffmpeg-v4l2request,
   sambaSupport ? false,
+  # Système de fenêtrage : "gbm" (défaut, DRM direct, pas de compositeur) ou
+  # "wayland" (client d'un compositeur). Un seul paquet, un seul jeu de
+  # patches : le retour à cage ne rebase rien, il change cet argument.
+  windowing ? "gbm",
 }:
-(kodi-gbm.override {
+let
+  base = if windowing == "wayland" then kodi-wayland else kodi-gbm;
+in
+(base.override {
   inherit sambaSupport;
   ffmpeg = ffmpeg-v4l2request;
 }).overrideAttrs

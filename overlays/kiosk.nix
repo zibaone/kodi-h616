@@ -13,9 +13,11 @@
 # chemins de store qu'aucun cache ne contient, et il faut les recompiler sous
 # émulation — 1 h 30 pour un mesa.
 final: prev: {
-  # XWayland est inutile quand le compositeur n'affiche qu'un client Wayland
-  # (cage + kodi) : retire xwayland, libdecor et gtk+3 de sa chaîne (~75 Mio).
-  wlroots_0_20 = prev.wlroots_0_20.override { enableXWayland = false; };
+  # XWayland n'est plus retiré de wlroots : l'image kiosque ne lance plus de
+  # compositeur depuis le passage en GBM direct (docs/fenetrage-kodi-gbm.md),
+  # et cage/wlroots ne figurent plus dans aucune fermeture. L'override
+  # `wlroots_0_20` (enableXWayland = false) qui vivait ici est donc mort avec
+  # l'architecture qu'il servait.
 
   # v4l-utils : les CLI (v4l2-ctl, v4l2-compliance) restent, les deux GUI
   # (qv4l2, qvidcap) tombent. Sans ça, mesa → libdisplay-info → v4l-utils →
