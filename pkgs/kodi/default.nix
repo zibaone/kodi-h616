@@ -1,6 +1,11 @@
 # Kodi 21.3 patché pour le décodeur stateless V4L2 Request (sunxi H616/H618).
 #
-# Trois adaptations par rapport à `kodi-wayland` de nixpkgs :
+# Quatre adaptations par rapport à `kodi-gbm` de nixpkgs :
+#  - fenêtrage GBM (et non Wayland) : Kodi envoie sa requête plein écran avant
+#    le mapping de sa surface (xbmc#20629, #27882) ; les compositeurs stricts
+#    (wlroots, weston) l'ignorent et Kodi n'obtient jamais de taille valide —
+#    il ne dessine alors rien. En GBM direct il n'y a pas de compositeur, donc
+#    pas de négociation à rater ;
 #  - `ffmpeg` remplacé par le paquet v4l2-request (voir ../ffmpeg-v4l2request) ;
 #  - backport xbmc#25467 (mergée dans master, +29/−25) : `FindHWConfig()`
 #    n'exige plus `device_type == AV_HWDEVICE_TYPE_DRM`, il accepte toute
@@ -15,11 +20,11 @@
 # 21.3 retomberait silencieusement sur le décodage CPU.
 {
   lib,
-  kodi-wayland,
+  kodi-gbm,
   ffmpeg-v4l2request,
   sambaSupport ? false,
 }:
-(kodi-wayland.override {
+(kodi-gbm.override {
   inherit sambaSupport;
   ffmpeg = ffmpeg-v4l2request;
 }).overrideAttrs
